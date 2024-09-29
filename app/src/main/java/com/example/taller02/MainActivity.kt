@@ -27,8 +27,8 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(baseContext, CameraActivity::class.java))
         }
 
-        binding.buttonCamera.setOnClickListener{
-            startActivity(Intent(baseContext, CameraActivity::class.java))
+        binding.buttonOsm.setOnClickListener{
+            startActivity(Intent(baseContext, GoogleMapsActivity::class.java))
         }
 
     }

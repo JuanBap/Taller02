@@ -12,11 +12,12 @@
         android:layout_width="187dp"
         android:layout_height="182dp"
         android:layout_marginStart="112dp"
-        android:layout_marginTop="49dp"
+        android:layout_marginTop="44dp"
         android:layout_marginEnd="112dp"
         android:background="@android:color/transparent"
         android:scaleType="centerInside"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:srcCompat="@drawable/contacts" />
@@ -46,7 +47,7 @@
         android:scaleType="centerInside"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.454"
+        app:layout_constraintHorizontal_bias="1.0"
         app:layout_constraintStart_toStartOf="parent"
         app:srcCompat="@drawable/osmap" />
 

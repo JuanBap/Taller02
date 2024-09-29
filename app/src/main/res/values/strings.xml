@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Taller02</string>
+    <string name="title_activity_google_maps">GoogleMapsActivity</string>
 </resources>
