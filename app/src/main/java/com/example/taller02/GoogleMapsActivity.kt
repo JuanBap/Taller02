@@ -1,18 +1,29 @@
 package com.example.taller02
 
 import android.Manifest
+import android.content.Context
 import android.content.IntentSender
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Drawable
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.location.Geocoder
 import android.location.Location
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Looper
 import android.util.Log
+import android.view.inputmethod.EditorInfo
 import android.widget.Toast
 import androidx.activity.result.ActivityResultCallback
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
@@ -31,6 +42,9 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.LocationSettingsRequest
 import com.google.android.gms.location.Priority
 import com.google.android.gms.location.SettingsClient
+import com.google.android.gms.maps.model.BitmapDescriptor
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.MapStyleOptions
 import org.json.JSONObject
 import java.io.BufferedWriter
 import java.io.File
@@ -41,8 +55,19 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var mMap: GoogleMap
     private lateinit var binding: ActivityGoogleMapsBinding
+
+    // Variables Punto 4
     private var currentLocation: Location? = null
     val RADIUS_OF_EARTH_KM = 6371
+
+    // Variables Punto 5 - Sensores para luminosidad
+    private lateinit var sensorManager: SensorManager
+    private var lightSensor: Sensor? = null
+    private var darkSensor: Sensor? = null
+    private lateinit var sensorEventListener: SensorEventListener
+
+    //Geocoder
+    private lateinit var geocoder: Geocoder
 
     // Permisos
     val locationPermission = registerForActivityResult(
@@ -88,8 +113,31 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
         locationRequest= createLocationRequest()
         locationCallback= createLocationCallback()
 
+        //Sensores
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager //castear porque necesito el tipo de sensor manager
+        lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
+        sensorEventListener = createSensorEventListener()
+
+        //Geocoder
+        geocoder = Geocoder(baseContext)
+
         //Solicitud del permiso
         locationPermission.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+
+        binding.address.setOnEditorActionListener { v, actionId, event ->
+            if(actionId == EditorInfo.IME_ACTION_SEARCH) {
+                val address = binding.address.text.toString()
+                val location = findLocation(address)
+                if(location!=null) {
+                    mMap.clear()
+                    drawMarker(location, address, R.drawable.location_pin)
+                    mMap.moveCamera(CameraUpdateFactory.zoomTo(10f))
+                    mMap.moveCamera(CameraUpdateFactory.newLatLng(location))
+
+                }
+            }
+            return@setOnEditorActionListener true
+        }
 
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         val mapFragment = supportFragmentManager
@@ -101,10 +149,24 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
 
-        // Add a marker in Sydney and move the camera
-        val puj = LatLng(4.627119, -74.04229)
-        mMap.addMarker(MarkerOptions().position(puj).title("Marker in PUJ"))
-        mMap.moveCamera(CameraUpdateFactory.newLatLng(puj))
+        val bogota = LatLng(4.63, -74.10)
+        mMap.addMarker(MarkerOptions().position(bogota).title("Marker in Sydney"))
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(bogota))
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(bogota, 15f))
+        mMap.uiSettings.isZoomControlsEnabled = true
+
+        val marker = mMap.addMarker(MarkerOptions().position(bogota).title("Marker in Bogota"))
+        mMap.addMarker(MarkerOptions().position(bogota)
+            .title("Pontificia Universidad Javeriana")
+            .snippet("Población: 8081000")
+            .alpha(0.5f))
+        drawMarker(LatLng(4.62894444, -74.06485), "PUJ", R.drawable.location_pin)
+
+        mMap.setOnMapLongClickListener {
+            val address = this.findAddress(it)
+            drawMarker(it,address,R.drawable.location_pin)
+
+        }
     }
 
     //-----------FUNCIONES REQUERIDAS PARA PUNTO 4-----------//     ---> VISTAS EN LA SESIÓN 6
@@ -175,7 +237,15 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
     override fun onPause(){
         super.onPause()
         stopLocationUpdates()
+        sensorManager.unregisterListener(sensorEventListener)
 
+    }
+
+    override fun onResume() {
+        super.onResume()
+        lightSensor?.let {
+            sensorManager.registerListener(sensorEventListener, it, SensorManager.SENSOR_DELAY_NORMAL)
+        }
     }
 
 
@@ -206,5 +276,86 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     //-----------FUNCIONES PARA PUNTO 5,6,7,8 Y 9-----------//     ---> VISTAS EN LA SESIÓN 7
+    private fun createSensorEventListener(): SensorEventListener {
+        val listener : SensorEventListener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent?) {
+                //se autopregunta su estructura
+                //BASECONTEXT YA NO SIRVE PARA INTROSPECCIÓN DE OBJETOS
+                if(this@GoogleMapsActivity::mMap.isInitialized) {
+
+                    if (lightSensor != null) {
+                        if (event != null) {
+                            if (event.values[0] < 5000) {
+                                //dark
+                                mMap.setMapStyle(
+                                    MapStyleOptions.loadRawResourceStyle(
+                                        baseContext,
+                                        R.raw.map_dark
+                                    )
+                                )
+
+                            } else {
+                                mMap.setMapStyle(
+                                    MapStyleOptions.loadRawResourceStyle(
+                                        baseContext,
+                                        R.raw.map_light
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+
+            }
+
+        }
+        return listener
+
+    }
+
+    fun drawMarker(location : LatLng, description : String?, icon: Int){
+        val addressMarker = mMap.addMarker(MarkerOptions().position(location).icon(bitmapDescriptorFromVector(this,
+            icon)))!!
+        if(description!=null){
+            addressMarker.title=description
+        }
+
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(location))
+        mMap.moveCamera(CameraUpdateFactory.zoomTo(10f))
+    }
+
+    fun bitmapDescriptorFromVector(context : Context, vectorResId : Int) : BitmapDescriptor {
+        val vectorDrawable : Drawable = ContextCompat.getDrawable(context, vectorResId)!!
+        vectorDrawable.setBounds(0, 0, vectorDrawable.getIntrinsicWidth(), vectorDrawable.getIntrinsicHeight());
+        val bitmap = Bitmap.createBitmap(vectorDrawable.getIntrinsicWidth(), vectorDrawable.getIntrinsicHeight(),
+            Bitmap.Config.ARGB_8888);
+        val canvas = Canvas(bitmap)
+        vectorDrawable.draw(canvas)
+        return BitmapDescriptorFactory.fromBitmap(bitmap)
+    }
+
+    fun findAddress (location : LatLng):String?{
+        val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 2, /*Geocoder.GeocodeListener {  }*/)
+        if(addresses != null && !addresses.isEmpty()){
+            val addr = addresses.get(0)
+            val locname = addr.getAddressLine(0)
+            return locname
+        }
+        return null
+    }
+
+    fun findLocation(address : String):LatLng?{
+        val addresses = geocoder.getFromLocationName(address, 2)
+        if(addresses != null && !addresses.isEmpty()){
+            val addr = addresses.get(0)
+            val location = LatLng(addr.latitude, addr.
+            longitude)
+            return location
+        }
+        return null
+    }
 
 }
