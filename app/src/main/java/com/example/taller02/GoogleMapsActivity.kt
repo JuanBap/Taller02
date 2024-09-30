@@ -48,14 +48,17 @@ import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.android.gms.maps.model.PolylineOptions
+import org.json.JSONArray
 import org.json.JSONObject
 import org.osmdroid.bonuspack.routing.OSRMRoadManager
 import org.osmdroid.bonuspack.routing.RoadManager
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.overlay.Overlay
 import org.osmdroid.views.overlay.Polyline
+import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
+import java.io.FileReader
 import java.io.FileWriter
 import java.sql.Date
 
@@ -145,8 +148,12 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
         //Solicitud del permiso
         locationPermission.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
 
+        binding.traceRoutes.setOnClickListener {
+            drawRouteJson()
+        }
+
         binding.address.setOnEditorActionListener { v, actionId, event ->
-    if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+         if (actionId == EditorInfo.IME_ACTION_SEARCH) {
 
         val address = binding.address.text.toString()
         val location = findLocation(address)
@@ -180,6 +187,9 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
             }
         }
+
+
+
     }
     return@setOnEditorActionListener true
 }
@@ -188,6 +198,55 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
         val mapFragment = supportFragmentManager
             .findFragmentById(R.id.map) as SupportMapFragment
         mapFragment.getMapAsync(this)
+    }
+
+    private fun drawRouteJson() {
+        val filename = "locations.json"
+        val file = File(baseContext.getExternalFilesDir(null), filename)
+        if (!file.exists()) {
+            Toast.makeText(this, "No locations found", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val jsonString = BufferedReader(FileReader(file)).use { it.readText() }
+        val jsonArray = JSONArray(jsonString)
+        val routePoints = ArrayList<GeoPoint>()
+
+        for (i in 0 until jsonArray.length()) {
+            val jsonObject = jsonArray.getJSONObject(i)
+            val latitude = jsonObject.getDouble("latitude")
+            val longitude = jsonObject.getDouble("longitude")
+            routePoints.add(GeoPoint(latitude, longitude))
+            val latLng = LatLng(latitude, longitude)
+            val address = findAddress(latLng)
+            drawMarker(latLng, address, R.drawable.location_pin)
+        }
+
+        if (routePoints.size < 0) {
+            Toast.makeText(this, "Not enough points to draw a route", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val road = roadManager.getRoad(routePoints)
+        if (mMap != null) {
+            if (roadOverlay != null) {
+                // Remove the previous overlay from the map
+                (roadOverlay as? Overlay)?.let { overlay ->
+                    mMap.clear() // Clear all overlays
+                }
+            }
+            roadOverlay = RoadManager.buildRoadOverlay(road)
+            roadOverlay!!.outlinePaint.color = Color.RED
+            roadOverlay!!.outlinePaint.strokeWidth = 10F
+            // Add the new overlay to the map
+            val polylineOptions = PolylineOptions()
+            for (point in roadOverlay!!.points) {
+                polylineOptions.add(LatLng(point.latitude, point.longitude))
+            }
+            polylineOptions.color(Color.RED)
+            polylineOptions.width(10F)
+            mMap.addPolyline(polylineOptions)
+        }
     }
 
 
@@ -442,6 +501,18 @@ fun drawRoute(start: GeoPoint, finish: GeoPoint) {
         polylineOptions.width(10F)
         mMap.addPolyline(polylineOptions)
     }
+    fun drawRouteJson() {
+        val filename = "locations.json"
+        val file = File(baseContext.getExternalFilesDir(null), filename)
+        if (!file.exists()) {
+            Toast.makeText(this, "No locations found", Toast.LENGTH_SHORT).show()
+            return
+        }
+    }
+
+
+
+
 }
 
 
