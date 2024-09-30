@@ -206,7 +206,20 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 val distance = distance(location.latitude, location.longitude, it.latitude, it.longitude)
                 val formattedDistance = String.format("%.3f", distance)
                 Toast.makeText(this, "Distance to marker: $formattedDistance meters", Toast.LENGTH_SHORT).show()
+
+
+                val startGeoPoint = GeoPoint(location.latitude, location.longitude)
+                val finishGeoPoint = GeoPoint(it.latitude, it.longitude)
+                drawRoute(startGeoPoint, finishGeoPoint)
+                drawMarker(it, address, R.drawable.location_pin)
+                val currentLatLng = LatLng(location.latitude, location.longitude)
+                drawMarker(currentLatLng, address, R.drawable.location_pin)
+                //Mueve la camara al punto nuevo creado
+                mMap.moveCamera(CameraUpdateFactory.newLatLng(it))
+
+
             }
+
         }
     }
 
