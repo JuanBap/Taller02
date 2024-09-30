@@ -146,36 +146,43 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
         locationPermission.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
 
         binding.address.setOnEditorActionListener { v, actionId, event ->
-            if(actionId == EditorInfo.IME_ACTION_SEARCH) {
+    if (actionId == EditorInfo.IME_ACTION_SEARCH) {
 
-                val address = binding.address.text.toString()
-                val location = findLocation(address)
+        val address = binding.address.text.toString()
+        val location = findLocation(address)
 
-                val address2 = this.findAddress(location!!)
+        if (location != null) {
+            val address2 = this.findAddress(location)
 
-                if (location != null) {
-                    mMap.clear()
-                    drawMarker(location, address, R.drawable.location_pin)
-                    mMap.moveCamera(CameraUpdateFactory.zoomTo(15f))
-                    mMap.moveCamera(CameraUpdateFactory.newLatLng(location))
+            // Agregar marcador en la ubicación buscada
+            drawMarker(location, address, R.drawable.location_pin)
+            mMap.moveCamera(CameraUpdateFactory.zoomTo(15f))
+            mMap.moveCamera(CameraUpdateFactory.newLatLng(location))
 
-                    currentLocation?.let { currentLoc ->
-                        val distance = distance(currentLoc.latitude, currentLoc.longitude, location.latitude, location.longitude)
-                        val formattedDistance = String.format("%.3f", distance)
-                        Toast.makeText(this, "Distance to marker: $formattedDistance meters", Toast.LENGTH_SHORT).show()
+            currentLocation?.let { currentLoc ->
+                // Asegurarse de que el marcador de currentLocation siempre esté presente
+                val currentLatLng = LatLng(currentLoc.latitude, currentLoc.longitude)
+                //drawMarker(currentLatLng, "Current Location", R.drawable.location_pin)
 
-                        // Castear localización actual a GeoPoint
-                        val startGeoPoint = GeoPoint(currentLoc.latitude, currentLoc.longitude)
-                        val finishGeoPoint = GeoPoint(location.latitude, location.longitude)
+                val distance = distance(currentLoc.latitude, currentLoc.longitude, location.latitude, location.longitude)
+                val formattedDistance = String.format("%.3f", distance)
+                Toast.makeText(this, "Distance to marker: $formattedDistance meters", Toast.LENGTH_SHORT).show()
 
-                        // Dibujar la ruta
-                        drawRoute(startGeoPoint, finishGeoPoint)
+                // Castear localización actual a GeoPoint
+                val startGeoPoint = GeoPoint(currentLoc.latitude, currentLoc.longitude)
+                val finishGeoPoint = GeoPoint(location.latitude, location.longitude)
 
-                    }
-                }
+                // Dibujar la ruta
+                drawRoute(startGeoPoint, finishGeoPoint)
+                drawMarker(location, address, R.drawable.location_pin)
+                drawMarker(currentLatLng, address, R.drawable.location_pin)
+
+
             }
-            return@setOnEditorActionListener true
         }
+    }
+    return@setOnEditorActionListener true
+}
 
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         val mapFragment = supportFragmentManager
