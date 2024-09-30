@@ -6,6 +6,7 @@ import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -16,6 +17,7 @@ import android.location.Location
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Looper
+import android.os.StrictMode
 import android.util.Log
 import android.view.inputmethod.EditorInfo
 import android.widget.Toast
@@ -45,7 +47,13 @@ import com.google.android.gms.location.SettingsClient
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.MapStyleOptions
+import com.google.android.gms.maps.model.PolylineOptions
 import org.json.JSONObject
+import org.osmdroid.bonuspack.routing.OSRMRoadManager
+import org.osmdroid.bonuspack.routing.RoadManager
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.overlay.Overlay
+import org.osmdroid.views.overlay.Polyline
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
@@ -55,6 +63,10 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var mMap: GoogleMap
     private lateinit var binding: ActivityGoogleMapsBinding
+
+    //Para OSM Bonuspack
+    private lateinit var roadManager: RoadManager
+    private var roadOverlay: Polyline? = null
 
     // Variables Punto 4
     private var currentLocation: Location? = null
@@ -108,6 +120,15 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
         binding = ActivityGoogleMapsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // OSM Bonuspack
+        // Inicializar el RoadManager
+        roadManager = OSRMRoadManager(this, "ANDROID")
+
+        // Política de seguridad para permitir llamados síncronos (solo para pruebas)
+        val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
+        StrictMode.setThreadPolicy(policy)
+
+
         //Locations
         locationClient= LocationServices.getFusedLocationProviderClient(this)//es hija de activity entinces es base también
         locationRequest= createLocationRequest()
@@ -126,14 +147,31 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
         binding.address.setOnEditorActionListener { v, actionId, event ->
             if(actionId == EditorInfo.IME_ACTION_SEARCH) {
+
                 val address = binding.address.text.toString()
                 val location = findLocation(address)
-                if(location!=null) {
+
+                val address2 = this.findAddress(location!!)
+
+                if (location != null) {
                     mMap.clear()
                     drawMarker(location, address, R.drawable.location_pin)
-                    mMap.moveCamera(CameraUpdateFactory.zoomTo(10f))
+                    mMap.moveCamera(CameraUpdateFactory.zoomTo(15f))
                     mMap.moveCamera(CameraUpdateFactory.newLatLng(location))
 
+                    currentLocation?.let { currentLoc ->
+                        val distance = distance(currentLoc.latitude, currentLoc.longitude, location.latitude, location.longitude)
+                        val formattedDistance = String.format("%.3f", distance)
+                        Toast.makeText(this, "Distance to marker: $formattedDistance meters", Toast.LENGTH_SHORT).show()
+
+                        // Castear localización actual a GeoPoint
+                        val startGeoPoint = GeoPoint(currentLoc.latitude, currentLoc.longitude)
+                        val finishGeoPoint = GeoPoint(location.latitude, location.longitude)
+
+                        // Dibujar la ruta
+                        drawRoute(startGeoPoint, finishGeoPoint)
+
+                    }
                 }
             }
             return@setOnEditorActionListener true
@@ -149,23 +187,19 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
 
-        val bogota = LatLng(4.63, -74.10)
-        mMap.addMarker(MarkerOptions().position(bogota).title("Marker in Sydney"))
-        mMap.moveCamera(CameraUpdateFactory.newLatLng(bogota))
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(bogota, 15f))
-        mMap.uiSettings.isZoomControlsEnabled = true
 
-        val marker = mMap.addMarker(MarkerOptions().position(bogota).title("Marker in Bogota"))
-        mMap.addMarker(MarkerOptions().position(bogota)
-            .title("Pontificia Universidad Javeriana")
-            .snippet("Población: 8081000")
-            .alpha(0.5f))
-        drawMarker(LatLng(4.62894444, -74.06485), "PUJ", R.drawable.location_pin)
+       mMap.uiSettings.isZoomControlsEnabled = true
+
+
 
         mMap.setOnMapLongClickListener {
             val address = this.findAddress(it)
-            drawMarker(it,address,R.drawable.location_pin)
-
+            drawMarker(it, address, R.drawable.location_pin)
+            currentLocation?.let { location ->
+                val distance = distance(location.latitude, location.longitude, it.latitude, it.longitude)
+                val formattedDistance = String.format("%.3f", distance)
+                Toast.makeText(this, "Distance to marker: $formattedDistance meters", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -188,7 +222,7 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
                         currentLocation = location
                         // Update the map with the current location
                         val currentLatLng = LatLng(currentLocation!!.latitude, currentLocation!!.longitude)
-                        mMap.addMarker(MarkerOptions().position(currentLatLng).title("Current Location"))
+                        mMap.addMarker(MarkerOptions().position(currentLatLng).title("Current Location: ${findAddress(currentLatLng)} "))
                         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, 15f))
                     } else {
                         if (distance(currentLocation!!.latitude, currentLocation!!.longitude, location.latitude, location.longitude) > 0.03) {
@@ -324,7 +358,7 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         mMap.moveCamera(CameraUpdateFactory.newLatLng(location))
-        mMap.moveCamera(CameraUpdateFactory.zoomTo(10f))
+        mMap.moveCamera(CameraUpdateFactory.zoomTo(15f))
     }
 
     fun bitmapDescriptorFromVector(context : Context, vectorResId : Int) : BitmapDescriptor {
@@ -357,5 +391,38 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
         return null
     }
+
+
+
+fun drawRoute(start: GeoPoint, finish: GeoPoint) {
+    val routePoints = ArrayList<GeoPoint>()
+    routePoints.add(start)
+    routePoints.add(finish)
+    val road = roadManager.getRoad(routePoints)
+    Log.i("MapsApp", "Route length: ${road.mLength} km")
+    Log.i("MapsApp", "Duration: ${road.mDuration / 60} min")
+    if (mMap != null) {
+        if (roadOverlay != null) {
+            // Remove the previous overlay from the map
+            (roadOverlay as? Overlay)?.let { overlay ->
+                mMap.clear() // Clear all overlays
+            }
+        }
+        roadOverlay = RoadManager.buildRoadOverlay(road)
+        roadOverlay!!.outlinePaint.color = Color.RED
+        roadOverlay!!.outlinePaint.strokeWidth = 10F
+        // Add the new overlay to the map
+        // Note: Google Maps does not support osmdroid overlays directly
+        // You need to convert the osmdroid overlay to a Google Maps Polyline
+        val polylineOptions = PolylineOptions()
+        for (point in roadOverlay!!.points) {
+            polylineOptions.add(LatLng(point.latitude, point.longitude))
+        }
+        polylineOptions.color(Color.RED)
+        polylineOptions.width(10F)
+        mMap.addPolyline(polylineOptions)
+    }
+}
+
 
 }
