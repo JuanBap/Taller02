@@ -115,8 +115,6 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var locationRequest: LocationRequest
     private lateinit var locationCallback: LocationCallback
 
-
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -131,14 +129,13 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
         val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
         StrictMode.setThreadPolicy(policy)
 
-
         //Locations
-        locationClient= LocationServices.getFusedLocationProviderClient(this)//es hija de activity entinces es base también
+        locationClient= LocationServices.getFusedLocationProviderClient(this)
         locationRequest= createLocationRequest()
         locationCallback= createLocationCallback()
 
         //Sensores
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager //castear porque necesito el tipo de sensor manager
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
         sensorEventListener = createSensorEventListener()
 
@@ -153,46 +150,39 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         binding.address.setOnEditorActionListener { v, actionId, event ->
-         if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                val address = binding.address.text.toString()
+                val location = findLocation(address)
 
-        val address = binding.address.text.toString()
-        val location = findLocation(address)
+                if (location != null) {
+                    val address2 = this.findAddress(location)
 
-        if (location != null) {
-            val address2 = this.findAddress(location)
+                    // Agregar marcador en la ubicación buscada
+                    drawMarker(location, address, R.drawable.location_pin)
+                    mMap.moveCamera(CameraUpdateFactory.newLatLng(location))
+                    mMap.moveCamera(CameraUpdateFactory.zoomTo(15f))
 
-            // Agregar marcador en la ubicación buscada
-            drawMarker(location, address, R.drawable.location_pin)
-            mMap.moveCamera(CameraUpdateFactory.zoomTo(15f))
-            mMap.moveCamera(CameraUpdateFactory.newLatLng(location))
+                    currentLocation?.let { currentLoc ->
+                        // Asegurarse de que el marcador de currentLocation siempre esté presente
+                        val currentLatLng = LatLng(currentLoc.latitude, currentLoc.longitude)
 
-            currentLocation?.let { currentLoc ->
-                // Asegurarse de que el marcador de currentLocation siempre esté presente
-                val currentLatLng = LatLng(currentLoc.latitude, currentLoc.longitude)
-                //drawMarker(currentLatLng, "Current Location", R.drawable.location_pin)
+                        val distance = distance(currentLoc.latitude, currentLoc.longitude, location.latitude, location.longitude)
+                        val formattedDistance = String.format("%.3f", distance)
+                        Toast.makeText(this, "Distance to marker: $formattedDistance meters", Toast.LENGTH_SHORT).show()
 
-                val distance = distance(currentLoc.latitude, currentLoc.longitude, location.latitude, location.longitude)
-                val formattedDistance = String.format("%.3f", distance)
-                Toast.makeText(this, "Distance to marker: $formattedDistance meters", Toast.LENGTH_SHORT).show()
+                        // Castear localización actual a GeoPoint
+                        val startGeoPoint = GeoPoint(currentLoc.latitude, currentLoc.longitude)
+                        val finishGeoPoint = GeoPoint(location.latitude, location.longitude)
 
-                // Castear localización actual a GeoPoint
-                val startGeoPoint = GeoPoint(currentLoc.latitude, currentLoc.longitude)
-                val finishGeoPoint = GeoPoint(location.latitude, location.longitude)
-
-                // Dibujar la ruta
-                drawRoute(startGeoPoint, finishGeoPoint)
-                drawMarker(location, address, R.drawable.location_pin)
-                drawMarker(currentLatLng, address, R.drawable.location_pin)
-
-
+                        // Dibujar la ruta
+                        drawRoute(startGeoPoint, finishGeoPoint)
+                        drawMarker(location, address, R.drawable.location_pin)
+                        drawMarker(currentLatLng, address, R.drawable.location_pin)
+                    }
+                }
             }
+            return@setOnEditorActionListener true
         }
-
-
-
-    }
-    return@setOnEditorActionListener true
-}
 
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         val mapFragment = supportFragmentManager
@@ -217,12 +207,9 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
             val latitude = jsonObject.getDouble("latitude")
             val longitude = jsonObject.getDouble("longitude")
             routePoints.add(GeoPoint(latitude, longitude))
-            val latLng = LatLng(latitude, longitude)
-            val address = findAddress(latLng)
-            drawMarker(latLng, address, R.drawable.location_pin)
         }
 
-        if (routePoints.size < 0) {
+        if (routePoints.size < 2) {
             Toast.makeText(this, "Not enough points to draw a route", Toast.LENGTH_SHORT).show()
             return
         }
@@ -230,15 +217,12 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
         val road = roadManager.getRoad(routePoints)
         if (mMap != null) {
             if (roadOverlay != null) {
-                // Remove the previous overlay from the map
-                (roadOverlay as? Overlay)?.let { overlay ->
-                    mMap.clear() // Clear all overlays
-                }
+                mMap.clear() // Clear all overlays
             }
             roadOverlay = RoadManager.buildRoadOverlay(road)
             roadOverlay!!.outlinePaint.color = Color.RED
             roadOverlay!!.outlinePaint.strokeWidth = 10F
-            // Add the new overlay to the map
+
             val polylineOptions = PolylineOptions()
             for (point in roadOverlay!!.points) {
                 polylineOptions.add(LatLng(point.latitude, point.longitude))
@@ -246,17 +230,25 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
             polylineOptions.color(Color.RED)
             polylineOptions.width(10F)
             mMap.addPolyline(polylineOptions)
+
+            // Add markers
+            if (roadOverlay!!.points.isNotEmpty()) {
+                // Origin marker
+                val origin = roadOverlay!!.points.first()
+                drawMarker(LatLng(origin.latitude, origin.longitude), "Origin", R.drawable.location_pin)
+
+
+                // Destination marker
+                val destination = roadOverlay!!.points.last()
+                drawMarker(LatLng(destination.latitude, destination.longitude), "Destination", R.drawable.location_pin3)
+            }
         }
     }
-
 
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
 
-
-       mMap.uiSettings.isZoomControlsEnabled = true
-
-
+        mMap.uiSettings.isZoomControlsEnabled = true
 
         mMap.setOnMapLongClickListener {
             val address = this.findAddress(it)
@@ -266,7 +258,6 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 val formattedDistance = String.format("%.3f", distance)
                 Toast.makeText(this, "Distance to marker: $formattedDistance meters", Toast.LENGTH_SHORT).show()
 
-
                 val startGeoPoint = GeoPoint(location.latitude, location.longitude)
                 val finishGeoPoint = GeoPoint(it.latitude, it.longitude)
                 drawRoute(startGeoPoint, finishGeoPoint)
@@ -275,20 +266,15 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 drawMarker(currentLatLng, address, R.drawable.location_pin)
                 //Mueve la camara al punto nuevo creado
                 mMap.moveCamera(CameraUpdateFactory.newLatLng(it))
-
-
             }
-
         }
     }
 
-    //-----------FUNCIONES REQUERIDAS PARA PUNTO 4-----------//     ---> VISTAS EN LA SESIÓN 6
     private fun createLocationRequest(): com.google.android.gms.location.LocationRequest {
         val request = com.google.android.gms.location.LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
-            .setWaitForAccurateLocation(true)//encadenar llamados al mismo método
+            .setWaitForAccurateLocation(true)
             .setMinUpdateIntervalMillis(3000).build()
         return request
-
     }
 
     private fun createLocationCallback(): LocationCallback {
@@ -317,12 +303,10 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private fun locationSettings() {
         val builder = LocationSettingsRequest.Builder().addLocationRequest(locationRequest)
-            .addLocationRequest(locationRequest)
         val client: SettingsClient = LocationServices.getSettingsClient(this)
         val task = client.checkLocationSettings(builder.build())
         task.addOnSuccessListener { locationSettingsRespose ->
             startLocationUpdates()
-
         }
         task.addOnFailureListener { excepcion ->
             if (excepcion is ResolvableApiException) {
@@ -330,28 +314,24 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
                     var isr: IntentSenderRequest =
                         IntentSenderRequest.Builder(excepcion.resolution).build()
                     locationSettings.launch(isr)
-
                 } catch (sendEx: IntentSender.SendIntentException) {
-                    //binding.altitude.text = "Device with no GPS!"
                 }
             }
         }
     }
 
-    private fun startLocationUpdates(){
-
+    private fun startLocationUpdates() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            locationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())//suscribirme a cambios, me falta la reacción a esos cambios (callback)
-        }else{
+            locationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
+        } else {
             Toast.makeText(this, "NO PERMISSION", Toast.LENGTH_SHORT).show()
         }
     }
 
-    override fun onPause(){
+    override fun onPause() {
         super.onPause()
         stopLocationUpdates()
         sensorManager.unregisterListener(sensorEventListener)
-
     }
 
     override fun onResume() {
@@ -361,12 +341,11 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-
-    private fun stopLocationUpdates(){
-        locationClient.removeLocationUpdates(locationCallback)//si entra en pausa, cancelo suscripción de GPS
+    private fun stopLocationUpdates() {
+        locationClient.removeLocationUpdates(locationCallback)
     }
 
-    private fun persistLocation(){
+    private fun persistLocation() {
         val myLocation = MyLocation(Date(System.currentTimeMillis()), currentLocation!!.latitude, currentLocation!!.longitude)
         locations.add(myLocation.toJSON())
         val filename= "locations.json"
@@ -388,25 +367,19 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
         return Math.round(result * 1000.0) / 1000.0
     }
 
-    //-----------FUNCIONES PARA PUNTO 5,6,7,8 Y 9-----------//     ---> VISTAS EN LA SESIÓN 7
     private fun createSensorEventListener(): SensorEventListener {
         val listener : SensorEventListener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent?) {
-                //se autopregunta su estructura
-                //BASECONTEXT YA NO SIRVE PARA INTROSPECCIÓN DE OBJETOS
                 if(this@GoogleMapsActivity::mMap.isInitialized) {
-
                     if (lightSensor != null) {
                         if (event != null) {
                             if (event.values[0] < 5000) {
-                                //dark
                                 mMap.setMapStyle(
                                     MapStyleOptions.loadRawResourceStyle(
                                         baseContext,
                                         R.raw.map_dark
                                     )
                                 )
-
                             } else {
                                 mMap.setMapStyle(
                                     MapStyleOptions.loadRawResourceStyle(
@@ -421,99 +394,69 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
             }
 
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-
             }
-
         }
         return listener
-
     }
 
-    fun drawMarker(location : LatLng, description : String?, icon: Int){
-        val addressMarker = mMap.addMarker(MarkerOptions().position(location).icon(bitmapDescriptorFromVector(this,
-            icon)))!!
-        if(description!=null){
-            addressMarker.title=description
+    fun drawMarker(location : LatLng, description : String?, icon: Int) {
+        val addressMarker = mMap.addMarker(MarkerOptions().position(location).icon(bitmapDescriptorFromVector(this, icon)))!!
+        if(description != null) {
+            addressMarker.title = description
         }
-
-        mMap.moveCamera(CameraUpdateFactory.newLatLng(location))
-        mMap.moveCamera(CameraUpdateFactory.zoomTo(15f))
     }
 
     fun bitmapDescriptorFromVector(context : Context, vectorResId : Int) : BitmapDescriptor {
         val vectorDrawable : Drawable = ContextCompat.getDrawable(context, vectorResId)!!
-        vectorDrawable.setBounds(0, 0, vectorDrawable.getIntrinsicWidth(), vectorDrawable.getIntrinsicHeight());
-        val bitmap = Bitmap.createBitmap(vectorDrawable.getIntrinsicWidth(), vectorDrawable.getIntrinsicHeight(),
-            Bitmap.Config.ARGB_8888);
+        vectorDrawable.setBounds(0, 0, vectorDrawable.intrinsicWidth, vectorDrawable.intrinsicHeight)
+        val bitmap = Bitmap.createBitmap(vectorDrawable.intrinsicWidth, vectorDrawable.intrinsicHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         vectorDrawable.draw(canvas)
         return BitmapDescriptorFactory.fromBitmap(bitmap)
     }
 
-    fun findAddress (location : LatLng):String?{
-        val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 2, /*Geocoder.GeocodeListener {  }*/)
-        if(addresses != null && !addresses.isEmpty()){
-            val addr = addresses.get(0)
+    fun findAddress(location : LatLng): String? {
+        val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 2)
+        if(addresses != null && addresses.isNotEmpty()) {
+            val addr = addresses[0]
             val locname = addr.getAddressLine(0)
             return locname
         }
         return null
     }
 
-    fun findLocation(address : String):LatLng?{
+    fun findLocation(address : String): LatLng? {
         val addresses = geocoder.getFromLocationName(address, 2)
-        if(addresses != null && !addresses.isEmpty()){
-            val addr = addresses.get(0)
-            val location = LatLng(addr.latitude, addr.
-            longitude)
+        if(addresses != null && addresses.isNotEmpty()) {
+            val addr = addresses[0]
+            val location = LatLng(addr.latitude, addr.longitude)
             return location
         }
         return null
     }
 
-
-
-fun drawRoute(start: GeoPoint, finish: GeoPoint) {
-    val routePoints = ArrayList<GeoPoint>()
-    routePoints.add(start)
-    routePoints.add(finish)
-    val road = roadManager.getRoad(routePoints)
-    Log.i("MapsApp", "Route length: ${road.mLength} km")
-    Log.i("MapsApp", "Duration: ${road.mDuration / 60} min")
-    if (mMap != null) {
-        if (roadOverlay != null) {
-            // Remove the previous overlay from the map
-            (roadOverlay as? Overlay)?.let { overlay ->
+    fun drawRoute(start: GeoPoint, finish: GeoPoint) {
+        val routePoints = ArrayList<GeoPoint>()
+        routePoints.add(start)
+        routePoints.add(finish)
+        val road = roadManager.getRoad(routePoints)
+        Log.i("MapsApp", "Route length: ${road.mLength} km")
+        Log.i("MapsApp", "Duration: ${road.mDuration / 60} min")
+        if (mMap != null) {
+            if (roadOverlay != null) {
                 mMap.clear() // Clear all overlays
             }
-        }
-        roadOverlay = RoadManager.buildRoadOverlay(road)
-        roadOverlay!!.outlinePaint.color = Color.RED
-        roadOverlay!!.outlinePaint.strokeWidth = 10F
-        // Add the new overlay to the map
-        // Note: Google Maps does not support osmdroid overlays directly
-        // You need to convert the osmdroid overlay to a Google Maps Polyline
-        val polylineOptions = PolylineOptions()
-        for (point in roadOverlay!!.points) {
-            polylineOptions.add(LatLng(point.latitude, point.longitude))
-        }
-        polylineOptions.color(Color.RED)
-        polylineOptions.width(10F)
-        mMap.addPolyline(polylineOptions)
-    }
-    fun drawRouteJson() {
-        val filename = "locations.json"
-        val file = File(baseContext.getExternalFilesDir(null), filename)
-        if (!file.exists()) {
-            Toast.makeText(this, "No locations found", Toast.LENGTH_SHORT).show()
-            return
+            roadOverlay = RoadManager.buildRoadOverlay(road)
+            roadOverlay!!.outlinePaint.color = Color.RED
+            roadOverlay!!.outlinePaint.strokeWidth = 10F
+
+            val polylineOptions = PolylineOptions()
+            for (point in roadOverlay!!.points) {
+                polylineOptions.add(LatLng(point.latitude, point.longitude))
+            }
+            polylineOptions.color(Color.RED)
+            polylineOptions.width(10F)
+            mMap.addPolyline(polylineOptions)
         }
     }
-
-
-
-
-}
-
-
 }
