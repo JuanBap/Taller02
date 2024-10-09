@@ -240,7 +240,10 @@ class GoogleMapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
                 // Destination marker
                 val destination = roadOverlay!!.points.last()
+                val destinationLatLng = LatLng(destination.latitude, destination.longitude)
                 drawMarker(LatLng(destination.latitude, destination.longitude), "Destination", R.drawable.location_pin3)
+                mMap.moveCamera(CameraUpdateFactory.newLatLng(destinationLatLng))
+                mMap.moveCamera(CameraUpdateFactory.zoomTo(15f))
             }
         }
     }
